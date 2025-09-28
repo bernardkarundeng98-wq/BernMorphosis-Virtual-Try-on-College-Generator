@@ -11,6 +11,10 @@ export default function App() {
     }
   };
 
+  const handleReset = () => {
+    setImage(null);
+  };
+
   return (
     <div style={{ fontFamily: "Arial, sans-serif", textAlign: "center" }}>
       {/* Navbar */}
@@ -40,6 +44,20 @@ export default function App() {
             alt="Uploaded"
             style={{ maxWidth: "300px", border: "2px solid #ccc" }}
           />
+          <br />
+          <button
+            onClick={handleReset}
+            style={{
+              marginTop: "1rem",
+              padding: "0.5rem 1rem",
+              background: "red",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Reset Gambar
+          </button>
         </section>
       )}
     </div>
