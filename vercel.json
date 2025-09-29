@@ -3,8 +3,7 @@
   "builds": [
     {
       "src": "vite.config.ts",
-      "use": "@vercel/static-build",
-      "config": {}
+      "use": "@vercel/static-build"
     }
   ],
   "routes": [
