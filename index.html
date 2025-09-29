@@ -1,252 +1,81 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1"
+      content="width=device-width, initial-scale=1.0"
     />
     <title>Virtual Try-On Generator</title>
-    <link rel="icon" href="data:,">
     <style>
       :root {
-        --bg: #0f1115;
-        --panel: #151821;
-        --text: #e7e9ee;
-        --muted: #9aa3b2;
+        --bg: #0f172a;
+        --card: #111827;
+        --muted: #9ca3af;
         --accent: #22c55e;
         --danger: #ef4444;
-        --border: #242938;
+        --text: #e5e7eb;
       }
-      * { box-sizing: border-box; }
+      html, body, #root { height: 100%; }
       body {
         margin: 0;
         background: var(--bg);
         color: var(--text);
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+        box-sizing: border-box;
       }
-      header {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background: linear-gradient(180deg, #10131a, #0f1115 70%);
-        border-bottom: 1px solid var(--border);
-        padding: 16px 20px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .title { font-size: 28px; font-weight: 800; letter-spacing: .5px; margin: 0 0 18px; }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
       }
-      header .logo {
-        width: 28px; height: 28px; border-radius: 6px;
-        background: radial-gradient(100% 100% at 50% 0%, #7C3AED 0%, #22C55E 100%);
-        display: inline-block;
-      }
-      header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .2px; }
-      main {
-        max-width: 1040px; margin: 24px auto; padding: 0 16px;
-        display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-      }
-      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
       .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 16px;
-      }
-      .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; color: var(--text); }
-      .drop {
-        border: 2px dashed #2b3145;
+        background: var(--card);
         border-radius: 12px;
-        height: 420px;
+        padding: 16px;
+        box-shadow: 0 6px 20px rgba(0,0,0,.35);
+        min-height: 420px;
+      }
+      .card h3 { margin: 4px 0 12px; }
+      .preview {
+        width: 100%;
+        aspect-ratio: 1/1;
+        border: 2px dashed #374151;
+        border-radius: 12px;
         display: grid;
         place-items: center;
-        color: var(--muted);
-        background: #0f1320;
         overflow: hidden;
+        background: #0b1220;
       }
-      .drop img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .preview img { width: 100%; height: 100%; object-fit: contain; }
       .row { display: flex; gap: 10px; flex-wrap: wrap; }
-      button, label.btn {
-        background: #1f2937;
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-weight: 600;
-        cursor: pointer;
+      .btn {
+        border: none; border-radius: 10px; padding: 10px 14px;
+        font-weight: 700; cursor: pointer;
       }
-      button.primary { background: #1a2e22; border-color: #255a3b; }
-      button.primary:hover { background: #1f3a2a; }
-      button.danger { background: #2a1616; border-color: #5a2525; }
-      button.danger:hover { background: #3a1d1d; }
-      button:disabled { opacity: .6; cursor: not-allowed; }
-      .muted { color: var(--muted); font-size: 13px; }
-      .status { margin-top: 8px; min-height: 20px; font-size: 13px; }
-      .error { color: var(--danger); }
-      .success { color: var(--accent); }
-      .result-wrap {
-        display: grid; place-items: center; background:#0f1320;
-        border:1px solid var(--border); border-radius:12px; height:420px;
-        overflow: hidden;
+      .btn-primary { background: var(--accent); color: #08200f; }
+      .btn-danger { background: var(--danger); color: #220b0b; }
+      .btn-ghost  { background: #1f2937; color: var(--text); }
+      .muted { color: var(--muted); font-size: 12px; }
+      textarea {
+        width: 100%; min-height: 120px; background: #0b1220; color: var(--text);
+        border-radius: 10px; border: 1px solid #374151; padding: 10px; resize: vertical;
       }
-      .result-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .resultBox {
+        white-space: pre-wrap; line-height: 1.5;
+        font-size: 14px; color: #d1d5db;
+        background: #0b1220; border: 1px solid #374151;
+        padding: 12px; border-radius: 10px; min-height: 300px;
+      }
+      .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #0ea5e9; color: #04131B; font-weight: 800; }
+      .spinner { width: 18px; height: 18px; border: 3px solid #1f2937; border-top-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
-    <header>
-      <span class="logo"></span>
-      <h1>Virtual Try-On Generator</h1>
-    </header>
-
-    <main>
-      <!-- KIRI: Upload & Preview -->
-      <section class="card">
-        <h2>Preview</h2>
-        <div id="drop" class="drop">
-          <div class="muted" id="placeholder">Drop or Click to Upload</div>
-          <img id="preview" alt="" style="display:none" />
-        </div>
-        <div class="row" style="margin-top:12px">
-          <label class="btn" for="file">Pilih Gambar</label>
-          <input id="file" type="file" accept="image/*" hidden />
-          <button id="reset" class="danger">Reset</button>
-          <button id="gen" class="primary">Generate (AI)</button>
-        </div>
-        <div id="status" class="status"></div>
-        <p class="muted">Catatan: proses bisa 15-60 detik tergantung ukuran gambar & antrian model.</p>
-      </section>
-
-      <!-- KANAN: Hasil -->
-      <section class="card">
-        <h2>Hasil</h2>
-        <div class="result-wrap">
-          <img id="result" alt="Result will appear here" />
-        </div>
-        <div class="row" style="margin-top:12px">
-          <a id="download" class="btn" download="virtual-try-on.png" style="display:none; text-decoration:none;">Download</a>
-          <button id="clear" class="danger">Clear Hasil</button>
-        </div>
-      </section>
-    </main>
-
-    <script type="module">
-      const $ = (sel) => document.querySelector(sel);
-      const drop = $('#drop');
-      const fileInput = $('#file');
-      const preview = $('#preview');
-      const placeholder = $('#placeholder');
-      const genBtn = $('#gen');
-      const resetBtn = $('#reset');
-      const statusEl = $('#status');
-      const resultImg = $('#result');
-      const downloadA = $('#download');
-      const clearBtn = $('#clear');
-
-      let fileBlob = null;
-
-      function setStatus(msg, type='') {
-        statusEl.textContent = msg || '';
-        statusEl.className = 'status ' + (type || '');
-      }
-
-      function showPreview(blob) {
-        const url = URL.createObjectURL(blob);
-        preview.src = url;
-        preview.style.display = 'block';
-        placeholder.style.display = 'none';
-      }
-
-      function resetPreview() {
-        fileBlob = null;
-        preview.src = '';
-        preview.style.display = 'none';
-        placeholder.style.display = 'block';
-        setStatus('');
-      }
-
-      function setResult(base64) {
-        resultImg.src = 'data:image/png;base64,' + base64;
-        downloadA.href = resultImg.src;
-        downloadA.style.display = 'inline-block';
-      }
-
-      function clearResult() {
-        resultImg.src = '';
-        downloadA.removeAttribute('href');
-        downloadA.style.display = 'none';
-      }
-
-      // Drag & Drop
-      ;['dragenter','dragover'].forEach(evt =>
-        drop.addEventListener(evt, e => { e.preventDefault(); drop.style.borderColor='#3b82f6'; })
-      );
-      ;['dragleave','drop'].forEach(evt =>
-        drop.addEventListener(evt, e => { e.preventDefault(); drop.style.borderColor='#2b3145'; })
-      );
-      drop.addEventListener('drop', e => {
-        const f = e.dataTransfer.files?.[0];
-        if (f && f.type.startsWith('image/')) {
-          fileBlob = f;
-          showPreview(f);
-        }
-      });
-      drop.addEventListener('click', () => fileInput.click());
-
-      // File input
-      fileInput.addEventListener('change', e => {
-        const f = e.target.files?.[0];
-        if (f && f.type.startsWith('image/')) {
-          fileBlob = f;
-          showPreview(f);
-        }
-      });
-
-      // Reset
-      resetBtn.addEventListener('click', () => resetPreview());
-
-      // Clear result
-      clearBtn.addEventListener('click', () => clearResult());
-
-      // Generate
-      genBtn.addEventListener('click', async () => {
-        if (!fileBlob) {
-          setStatus('Silakan pilih gambar dulu.', 'error');
-          return;
-        }
-        setStatus('Mengunggah & memproses…', 'success');
-        genBtn.disabled = true;
-
-        try {
-          const fd = new FormData();
-          fd.append('image', fileBlob);
-
-          // Optional: prompt dari sisi client (bila API-mu mendukung override)
-          // fd.append('prompt', '…');
-
-          const res = await fetch('/api/generate', {
-            method: 'POST',
-            body: fd
-          });
-
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(text || 'Gagal memanggil API');
-          }
-
-          // API route mengembalikan { imageBase64: '...' }
-          const data = await res.json();
-          if (!data?.imageBase64) {
-            throw new Error('Respons API tidak berisi imageBase64');
-          }
-          setResult(data.imageBase64);
-          setStatus('Selesai ✅', 'success');
-        } catch (err) {
-          console.error(err);
-          setStatus('Error: ' + (err?.message || err), 'error');
-        } finally {
-          genBtn.disabled = false;
-        }
-      });
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
   </body>
 </html>

@@ -1,55 +1,43 @@
-// api/generate.ts — Vercel serverless (Node 18+)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleAI, Modality } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB batas ukuran
+export const config = { runtime: "nodejs20.x" };
+
+type Body = { prompt?: string; imageBase64: string };
+
+function stripDataUrl(b64: string) {
+  const i = b64.indexOf("base64,");
+  return i >= 0 ? b64.slice(i + "base64,".length) : b64;
+}
+function mimeOf(b64: string) {
+  if (b64.startsWith("data:image/jpeg") || b64.startsWith("data:image/jpg")) return "image/jpeg";
+  if (b64.startsWith("data:image/webp")) return "image/webp";
+  return "image/png";
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
+
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const { prompt, imageBase64, mimeType } = req.body ?? {};
-    if (!prompt || !imageBase64 || !mimeType) {
-      return res.status(400).json({ error: "payload tidak lengkap" });
-    }
-
-    // estimasi byte dari base64
-    const approxBytes = Math.floor(imageBase64.length * 0.75);
-    if (approxBytes > MAX_IMAGE_BYTES) {
-      return res.status(413).json({ error: "Gambar terlalu besar, maksimum 8MB." });
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY belum diset di server." });
+    if (!apiKey) return res.status(500).json({ error: "Missing GEMINI_API_KEY" });
 
-    const ai = new GoogleAI({ apiKey });
+    const { prompt = "Describe the outfit and propose improvements.", imageBase64 } = req.body as Body;
+    if (!imageBase64) return res.status(400).json({ error: "imageBase64 is required" });
 
-    const contents = [
-      {
-        role: "user",
-        parts: [
-          { inlineData: { data: imageBase64, mimeType } },
-          { text: prompt },
-        ],
-      },
-    ];
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const resp = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image-preview",
-      contents,
-      config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
-    });
+    const inlineData = { mimeType: mimeOf(imageBase64), data: stripDataUrl(imageBase64) };
+    const result = await model.generateContent([
+      { text: `You are a fashion stylist. Given the photo, respond in Indonesian with concrete outfit suggestions and step-by-step editing instructions. Prompt user request: ${prompt}` },
+      { inlineData }
+    ]);
 
-    const candidates = resp.candidates ?? [];
-    const imgPart = candidates[0]?.content?.parts?.find((p: any) => p?.inlineData?.data)?.inlineData;
-
-    if (imgPart?.data) {
-      return res.status(200).json({ imageBase64: imgPart.data }); // base64 tanpa prefix
-    }
-
-    const txt = candidates[0]?.content?.parts?.find((p: any) => p?.text)?.text;
-    return res.status(500).json({ error: txt ?? "Model tidak mengembalikan gambar." });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "server error" });
+    const output = result.response.text();
+    return res.status(200).json({ output });
+  } catch (err: any) {
+    console.error("API error:", err);
+    return res.status(500).json({ error: "FUNCTION_INVOCATION_FAILED", message: err?.message || String(err) });
   }
 }
