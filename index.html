@@ -8,74 +8,28 @@
     />
     <title>Virtual Try-On Generator</title>
     <style>
-      :root {
-        --bg: #0f172a;
-        --card: #111827;
-        --muted: #9ca3af;
-        --accent: #22c55e;
-        --danger: #ef4444;
-        --text: #e5e7eb;
-      }
-      html, body, #root { height: 100%; }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-        box-sizing: border-box;
-      }
-      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-      .title { font-size: 28px; font-weight: 800; letter-spacing: .5px; margin: 0 0 18px; }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 18px;
-      }
-      .card {
-        background: var(--card);
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 6px 20px rgba(0,0,0,.35);
-        min-height: 420px;
-      }
-      .card h3 { margin: 4px 0 12px; }
-      .preview {
-        width: 100%;
-        aspect-ratio: 1/1;
-        border: 2px dashed #374151;
-        border-radius: 12px;
-        display: grid;
-        place-items: center;
-        overflow: hidden;
-        background: #0b1220;
-      }
-      .preview img { width: 100%; height: 100%; object-fit: contain; }
-      .row { display: flex; gap: 10px; flex-wrap: wrap; }
-      .btn {
-        border: none; border-radius: 10px; padding: 10px 14px;
-        font-weight: 700; cursor: pointer;
-      }
-      .btn-primary { background: var(--accent); color: #08200f; }
-      .btn-danger { background: var(--danger); color: #220b0b; }
-      .btn-ghost  { background: #1f2937; color: var(--text); }
-      .muted { color: var(--muted); font-size: 12px; }
-      textarea {
-        width: 100%; min-height: 120px; background: #0b1220; color: var(--text);
-        border-radius: 10px; border: 1px solid #374151; padding: 10px; resize: vertical;
-      }
-      .resultBox {
-        white-space: pre-wrap; line-height: 1.5;
-        font-size: 14px; color: #d1d5db;
-        background: #0b1220; border: 1px solid #374151;
-        padding: 12px; border-radius: 10px; min-height: 300px;
-      }
-      .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #0ea5e9; color: #04131B; font-weight: 800; }
-      .spinner { width: 18px; height: 18px; border: 3px solid #1f2937; border-top-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
-      @keyframes spin { to { transform: rotate(360deg); } }
+      :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --primary:#22c55e; --danger:#ef4444; }
+      * { box-sizing: border-box }
+      body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+      header { background:#00000088; backdrop-filter: blur(4px); padding:16px 24px; font-size:24px; font-weight:800; text-align:center; }
+      main { max-width:1100px; margin:0 auto; padding:24px; display:grid; gap:24px; grid-template-columns: 1fr 1fr; }
+      .card { background:var(--panel); border:1px solid #1f2937; border-radius:12px; padding:16px; }
+      .title { font-weight:700; margin-bottom:10px }
+      .preview, .result { width:100%; aspect-ratio: 1/1; background:#0b1220; border:2px dashed #334155; border-radius:12px; display:grid; place-items:center; overflow:hidden; }
+      .preview img, .result img { width:100%; height:100%; object-fit:cover }
+      .controls { display:flex; gap:8px; flex-wrap: wrap; margin-top:12px }
+      button { appearance:none; border:0; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer; }
+      .btn { background:#1f2937; color:#fff; }
+      .btn.primary { background:var(--primary) }
+      .btn.danger { background:var(--danger) }
+      .muted { color:var(--muted); font-size:12px; margin-top:8px }
+      textarea { width:100%; min-height:100px; background:#0b1220; color:var(--text); border:1px solid #334155; border-radius:10px; padding:10px; resize:vertical }
+      .error { color:#fecaca; font-weight:700; }
+      @media (max-width: 900px) { main { grid-template-columns: 1fr } }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

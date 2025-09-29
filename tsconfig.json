@@ -6,11 +6,10 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": ".",
-    "paths": {
-      "@services/*": ["Services/*"],
-      "@utils/*": ["Utils/*"]
-    }
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": []
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["src", "api", "vite.config.ts"]
 }

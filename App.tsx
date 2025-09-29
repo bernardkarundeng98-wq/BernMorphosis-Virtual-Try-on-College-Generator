@@ -1,314 +1,135 @@
-// App.tsx
-import React, { useState, useRef } from "react";
+import React, { useRef, useState } from "react";
+import { fileToBase64 } from "./utils/fileToBase64";
 
-// helper: File -> base64 dataURL
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+type GenResponse = { imageBase64?: string; error?: string };
 
 export default function App() {
-  const [preview, setPreview] = useState<string | null>(null);
-  const [prompt, setPrompt]   = useState<string>("");
-  const [result, setResult]   = useState<string>(""); // dataURL image atau teks
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError]     = useState<string>("");
+  const [error, setError] = useState<string>("");
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const isResultImage =
-    typeof result === "string" &&
-    (result.startsWith("data:image/") || result.startsWith("http"));
+  async function onPick() {
+    fileRef.current?.click();
+  }
 
-  const pickImage = () => fileInputRef.current?.click();
-
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[1] ?? e.target.files?.[0];
     if (!f) return;
-    const dataUrl = await fileToBase64(f);
-    setPreview(dataUrl);
-    setResult("");
+    setResultUrl(null);
     setError("");
-  };
+    setPreviewUrl(URL.createObjectURL(f));
+  }
 
-  const onReset = () => {
-    setPreview(null);
+  function resetAll() {
+    setPreviewUrl(null);
+    setResultUrl(null);
     setPrompt("");
-    setResult("");
     setError("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
-  const onDownload = () => {
-    if (!isResultImage) return;
-    const link = document.createElement("a");
-    link.href = result;
-    link.download = "virtual-try-on.png";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const onGenerate = async () => {
-    if (!preview) return setError("Silakan pilih gambar dulu.");
-    if (!prompt.trim()) return setError("Silakan isi prompt/instruksi.");
-
-    setLoading(true);
-    setError("");
-    setResult("");
-
+  async function onGenerate() {
     try {
-      const rawBase64 = preview.split(",")[1] || preview;
+      setLoading(true);
+      setError("");
 
-      const resp = await fetch("/api/generate", {
+      const file = fileRef.current?.files?.[0];
+      if (!file) {
+        setError("Silakan pilih gambar dulu.");
+        return;
+      }
+      if (!prompt.trim()) {
+        setError("Silakan isi deskripsi (prompt) dulu.");
+        return;
+      }
+
+      const imageBase64 = await fileToBase64(file);
+
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: rawBase64, // tanpa prefix
-          imageDataUrl: preview,  // dengan prefix (cadangan)
-          prompt,
-        }),
+        body: JSON.stringify({ prompt, imageBase64 })
       });
 
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(`HTTP ${resp.status} – ${txt}`);
+      const data: GenResponse = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Server error");
       }
 
-      const data = await resp.json();
-
-      // Normalisasi output
-      const outImg =
-        data.imageDataUrl ||
-        (data.imageBase64 ? `data:image/png;base64,${data.imageBase64}` : null);
-
-      if (outImg) {
-        setResult(outImg);
-      } else if (typeof data.output === "string") {
-        setResult(data.output);
-      } else {
-        setResult("✅ Selesai, namun tidak ada image yang diterima dari model.");
+      if (!data.imageBase64) {
+        throw new Error("Respons tidak berisi gambar.");
       }
-    } catch (e: any) {
-      console.error(e);
-      setError(`Terjadi error: ${e?.message || String(e)}`);
+
+      setResultUrl(`data:image/png;base64,${data.imageBase64}`);
+    } catch (err: any) {
+      setError(err?.message || "Gagal generate.");
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  function downloadResult() {
+    if (!resultUrl) return;
+    const a = document.createElement("a");
+    a.href = resultUrl;
+    a.download = "virtual-try-on.png";
+    a.click();
+  }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0f172a",
-        color: "#e2e8f0",
-        fontFamily:
-          "system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif",
-      }}
-    >
-      <header
-        style={{
-          background: "#111827",
-          padding: "18px 24px",
-          borderBottom: "1px solid #1f2937",
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 28 }}>👕 Virtual Try-On Generator</h1>
-      </header>
+    <>
+      <header>👕 Virtual Try-On Generator</header>
 
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 24,
-            alignItems: "start",
-          }}
-        >
-          {/* Kiri: Input */}
-          <section
-            style={{
-              background: "#0b1220",
-              border: "1px solid #1f2937",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Preview</h3>
+      <main>
+        {/* Left panel */}
+        <section className="card">
+          <div className="title">Preview</div>
+          <div className="preview">
+            {previewUrl ? <img src={previewUrl} /> : <span className="muted">Pilih gambar wajah kamu</span>}
+          </div>
 
-            <div
-              style={{
-                width: "100%",
-                aspectRatio: "1/1",
-                borderRadius: 12,
-                border: "1px dashed #334155",
-                display: "grid",
-                placeItems: "center",
-                overflow: "hidden",
-                background: "#0a0f1d",
-                marginBottom: 12,
-              }}
-            >
-              {preview ? (
-                <img
-                  src={preview}
-                  alt="preview"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                <div style={{ opacity: 0.7 }}>Belum ada gambar</div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={onFileChange}
-                style={{ display: "none" }}
-              />
-              <button onClick={pickImage} style={btn("#0ea5e9")} disabled={loading}>
-                Pilih Gambar
-              </button>
-              <button onClick={onReset} style={btn("#ef4444")} disabled={loading}>
-                Reset
-              </button>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <label style={{ display: "block", marginBottom: 6, fontSize: 14, opacity: 0.9 }}>
-              Prompt / Instruksi
-            </label>
-            <textarea
-              placeholder="Contoh: Ganti kemeja jadi jas hitam elegan + dasi, latar belakang kantor modern."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              style={{
-                width: "100%",
-                minHeight: 96,
-                resize: "vertical",
-                padding: 12,
-                borderRadius: 10,
-                outline: "none",
-                border: "1px solid #334155",
-                background: "#0a0f1d",
-                color: "#e2e8f0",
-              }}
-            />
-
-            <div style={{ height: 12 }} />
-            <button onClick={onGenerate} style={btn("#22c55e")} disabled={loading}>
+          <div className="controls">
+            <button className="btn" onClick={onPick}>Pilih Gambar</button>
+            <button className="btn danger" onClick={resetAll}>Reset</button>
+            <button className="btn primary" onClick={onGenerate} disabled={loading}>
               {loading ? "Generating…" : "Generate (AI)"}
             </button>
+          </div>
 
-            <p style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
-              Catatan: proses bisa 15–60 detik tergantung ukuran gambar & antrian model.
-            </p>
+          <div className="muted">
+            Catatan: proses bisa 15–60 detik tergantung ukuran gambar & antrean model.
+          </div>
 
-            {error && (
-              <div
-                style={{
-                  marginTop: 8,
-                  background: "#1f2937",
-                  border: "1px solid #4b5563",
-                  color: "#fecaca",
-                  borderRadius: 8,
-                  padding: 10,
-                  fontSize: 14,
-                }}
-              >
-                {error}
-              </div>
-            )}
-          </section>
+          {error && <div className="error" style={{marginTop: 8}}>Error: {error}</div>}
 
-          {/* Kanan: Hasil */}
-          <section
-            style={{
-              background: "#0b1220",
-              border: "1px solid #1f2937",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Hasil</h3>
+          <input type="file" ref={fileRef} accept="image/*" hidden onChange={onFile} />
+        </section>
 
-            <div
-              style={{
-                width: "100%",
-                aspectRatio: "1/1",
-                borderRadius: 12,
-                border: "1px dashed #334155",
-                display: "grid",
-                placeItems: "center",
-                overflow: "hidden",
-                background: "#0a0f1d",
-              }}
-            >
-              {result ? (
-                isResultImage ? (
-                  <img
-                    src={result}
-                    alt="result"
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      padding: 16,
-                      whiteSpace: "pre-wrap",
-                      maxHeight: "100%",
-                      overflow: "auto",
-                      width: "100%",
-                    }}
-                  >
-                    {result}
-                  </div>
-                )
-              ) : (
-                <div style={{ opacity: 0.7 }}>🖼️ Result will appear here</div>
-              )}
-            </div>
+        {/* Right panel */}
+        <section className="card">
+          <div className="title">Hasil</div>
+          <div className="result">
+            {resultUrl ? <img src={resultUrl} /> : <span className="muted">Result will appear here</span>}
+          </div>
 
-            <div style={{ height: 12 }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => setResult("")}
-                style={btn("#ef4444")}
-                disabled={loading || !result}
-              >
-                Clear Hasil
-              </button>
-              <button
-                onClick={onDownload}
-                style={btn("#0ea5e9")}
-                disabled={!isResultImage || loading}
-              >
-                Download
-              </button>
-            </div>
-          </section>
-        </div>
+          <div className="title" style={{marginTop: 16}}>Deskripsi (Prompt)</div>
+          <textarea
+            placeholder="Contoh: Kenakan kemeja batik coklat motif parang, setengah badan, latar netral…"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+          />
+
+          <div className="controls">
+            <button className="btn danger" onClick={() => setResultUrl(null)}>Clear Hasil</button>
+            <button className="btn primary" onClick={downloadResult} disabled={!resultUrl}>Download</button>
+          </div>
+        </section>
       </main>
-    </div>
+    </>
   );
-}
-
-function btn(bg: string): React.CSSProperties {
-  return {
-    background: bg,
-    border: "none",
-    color: "white",
-    padding: "10px 14px",
-    borderRadius: 10,
-    cursor: "pointer",
-    fontWeight: 600,
-  };
 }

@@ -1,15 +1,10 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "vite.config.ts",
-      "use": "@vercel/static-build"
-    }
+    { "src": "vite.config.ts", "use": "@vercel/static-build" }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+    { "src": "/api/generate", "dest": "/api/generate.ts" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
