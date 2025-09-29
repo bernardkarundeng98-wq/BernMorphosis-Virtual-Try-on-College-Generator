@@ -1,199 +1,294 @@
-import React, { useCallback, useState } from "react";
-import { generateCollage } from "./Services/geminiService";
-import { fileToBase64 } from "./Utils/fileUtils";
+import React, { useCallback, useMemo, useState } from "react";
 
-const App: React.FC = () => {
+/**
+ * Util: baca file sebagai DataURL (data:image/...;base64,XXXX)
+ */
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+/**
+ * Util: ekstrak mimeType dan base64 "bersih" dari DataURL
+ * contoh: "data:image/png;base64,AAA..." -> { mimeType: "image/png", base64: "AAA..." }
+ */
+function parseDataURL(dataUrl: string) {
+  // data:[mime];base64,[payload]
+  const [header, payload = ""] = dataUrl.split(",");
+  const mimeMatch = header.match(/^data:(.*?);base64$/i);
+  const mimeType = mimeMatch?.[1] || "image/png";
+  return { mimeType, base64: payload };
+}
+
+export default function App() {
   const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [resultImage, setResultImage] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const onPick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // prompt default — bisa kamu ganti sesuai kebutuhan
+  const prompt = useMemo(
+    () =>
+      "Ganti pakaian orang pada foto menjadi kemeja formal putih rapi, pencahayaan studio, kualitas tinggi. Hasilkan sebagai gambar PNG.",
+    []
+  );
+
+  const onPickFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError("");
+    setResultImage("");
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setErr("File harus gambar (PNG/JPG).");
+    // batasi ukuran (opsional)
+    if (f.size > 8 * 1024 * 1024) {
+      setError("Ukuran file terlalu besar (maks 8MB).");
       return;
     }
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
-    setResultUrl(null);
-    setErr(null);
   }, []);
-
-  const onDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setErr("File harus gambar (PNG/JPG).");
-      return;
-    }
-    setFile(f);
-    setPreviewUrl(URL.createObjectURL(f));
-    setResultUrl(null);
-    setErr(null);
-  }, []);
-
-  const onGenerate = useCallback(async () => {
-    if (!file) {
-      setErr("Upload gambar dulu ya.");
-      return;
-    }
-    setIsLoading(true);
-    setErr(null);
-    setResultUrl(null);
-    try {
-      const base64 = await fileToBase64(file);
-
-      const prompt = `Tugas: Buat kolase foto ultra-fotorealistik 8K yang terdiri dari 9 bingkai (grid 3x3, rasio 9:16).
-Aturan:
-- Pertahankan 100% wajah, warna kulit, dan proporsi tubuh orang pada foto referensi.
-- Jika memegang produk, pertahankan produk & cara memegangnya.
-- Latar belakang: kotak kardus cokelat polos yang konsisten di tiap bingkai.
-Tema: trendi, youthful, ekspresif, cocok estetika media sosial.
-Detail 9 bingkai (unik tiap bingkai):
-1. Hoodie pastel + bubble tea, ceria.
-2. Cardigan burgundy + oles skincare dengan kapas, senyum lucu.
-3. Sweater krem + baca majalah fashion, penasaran.
-4. Jaket denim + headphone + makan ramen, fokus.
-5. Atasan oranye-cokelat + pegang foto polaroid, melamun.
-6. Kaos hijau mint + papan nama "BERN" + pose peace.
-7. Piyama abu-abu + sandar bantal, mata terpejam.
-8. Kaos garis + apron + tas belanja sayur, antusias.
-9. Kaos lengan panjang pink bergrafis + selfie kamera polaroid, ceria.
-Output: 1 gambar kolase tunggal 8K, karakter konsisten di 9 bingkai.`;
-
-      const resultB64 = await generateCollage(prompt, base64, file.type);
-      setResultUrl(`data:image/png;base64,${resultB64}`);
-    } catch (e: any) {
-      setErr(e?.message ?? "Gagal generate gambar.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [file]);
 
   const onReset = useCallback(() => {
     setFile(null);
-    setPreviewUrl(null);
-    setResultUrl(null);
-    setErr(null);
+    setPreviewUrl("");
+    setResultImage("");
+    setError("");
   }, []);
 
+  const onClearResult = useCallback(() => {
+    setResultImage("");
+  }, []);
+
+  const handleGenerate = useCallback(async () => {
+    try {
+      setError("");
+      setResultImage("");
+      if (!file) {
+        setError("Silakan pilih gambar terlebih dahulu.");
+        return;
+      }
+      setLoading(true);
+
+      // baca sebagai dataURL lalu ekstrak base64 & mime
+      const dataUrl = await readFileAsDataURL(file);
+      const { base64, mimeType } = parseDataURL(dataUrl);
+
+      const resp = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          imageBase64: base64,
+          mimeType,
+        }),
+      });
+
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.error || `Request failed (${resp.status})`);
+      }
+
+      const json: { output: string } = await resp.json();
+
+      // Catatan: API kita saat ini mengembalikan "output" sebagai TEKS (bukan gambar).
+      // Jika modelmu mengembalikan URI gambar base64, kamu bisa set langsung.
+      // Di sini diasumsikan "output" adalah URL data:image/png;base64,xxx ATAU link publik.
+      // Kita coba deteksi:
+      if (json.output?.startsWith("data:image/")) {
+        setResultImage(json.output);
+      } else if (/^https?:\/\//i.test(json.output)) {
+        setResultImage(json.output);
+      } else {
+        // jika teks biasa, tampilkan sebagai error sementara
+        setError("Model mengembalikan teks: " + json.output.slice(0, 200));
+      }
+    } catch (err: any) {
+      setError(err?.message || "Terjadi kesalahan saat memproses.");
+    } finally {
+      setLoading(false);
+    }
+  }, [file, prompt]);
+
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-neutral-900/80 backdrop-blur border-b border-neutral-800">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <span className="text-2xl">👕</span>
-          <h1 className="text-xl sm:text-2xl font-bold">
-            Virtual Try-On Generator
-          </h1>
-        </div>
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <span style={styles.logo}>👕</span>
+        <h1 style={styles.title}>Virtual Try-On Generator</h1>
       </header>
 
-      {/* Content */}
-      <main className="max-w-6xl mx-auto px-4 py-8 grid lg:grid-cols-2 gap-8">
-        {/* Left: Uploader / Preview */}
-        <section>
-          <h2 className="text-lg font-semibold mb-3">Preview</h2>
-
-          <label
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={onDrop}
-            className="group relative block w-full aspect-[3/4] rounded-xl border border-dashed border-neutral-700 bg-neutral-800/60 hover:bg-neutral-800 transition grid place-items-center overflow-hidden"
-          >
+      <main style={styles.main}>
+        <section style={styles.column}>
+          <h2 style={styles.sectionTitle}>Preview</h2>
+          <div style={styles.previewBox}>
             {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="preview"
-                className="h-full w-full object-contain"
-              />
+              <img src={previewUrl} alt="preview" style={styles.img} />
             ) : (
-              <div className="text-center px-6 py-10 text-neutral-400">
-                <div className="text-4xl mb-2">⬆️</div>
-                <p className="font-medium">Klik untuk upload</p>
-                <p className="text-sm opacity-80">atau drag & drop foto ke sini</p>
-                <p className="text-xs mt-2 opacity-60">PNG/JPG hingga 10MB</p>
-              </div>
+              <div style={styles.placeholder}>Belum ada gambar</div>
             )}
-            <input
-              type="file"
-              accept="image/*"
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              onChange={onPick}
-            />
-          </label>
+          </div>
 
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={onReset}
-              className="px-4 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 font-medium"
-            >
-              Reset Gambar
+          <div style={styles.row}>
+            <label style={styles.uploadBtn}>
+              Pilih Gambar
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onPickFile}
+                style={{ display: "none" }}
+              />
+            </label>
+
+            <button style={styles.resetBtn} onClick={onReset} disabled={!file && !previewUrl}>
+              Reset
             </button>
-            <button
-              onClick={onGenerate}
-              disabled={!file || isLoading}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-semibold"
-            >
-              {isLoading ? "Generating…" : "Generate (AI)"}
+
+            <button style={styles.generateBtn} onClick={handleGenerate} disabled={loading || !file}>
+              {loading ? "Memproses..." : "Generate (AI)"}
             </button>
           </div>
 
-          {err && (
-            <p className="mt-3 text-sm text-red-400">
-              ⚠️ {err}
-            </p>
-          )}
+          <p style={styles.note}>
+            Catatan: proses bisa 15–60 detik tergantung ukuran gambar & antrean model.
+          </p>
+
+          {error && <p style={styles.error}>Error: {error}</p>}
         </section>
 
-        {/* Right: Hasil */}
-        <section>
-          <h2 className="text-lg font-semibold mb-3">Hasil</h2>
-          <div className="relative w-full min-h-[320px] rounded-xl border border-neutral-800 bg-neutral-800/50 grid place-items-center overflow-hidden">
-            {isLoading && (
-              <div className="text-center">
-                <div className="w-12 h-12 border-4 border-neutral-600 border-t-emerald-400 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-neutral-300 font-medium">Sedang membuat kolase 9 gaya…</p>
-                <p className="text-neutral-400 text-sm mt-1">Mohon tunggu ya (± beberapa detik)</p>
-              </div>
-            )}
-
-            {!isLoading && resultUrl && (
-              <img
-                src={resultUrl}
-                alt="AI result"
-                className="w-full h-full object-contain"
-              />
-            )}
-
-            {!isLoading && !resultUrl && (
-              <p className="text-neutral-400 text-sm">
-                Hasil akan tampil di sini setelah proses selesai.
-              </p>
+        <section style={styles.column}>
+          <h2 style={styles.sectionTitle}>Hasil</h2>
+          <div style={styles.resultBox}>
+            {resultImage ? (
+              <img src={resultImage} alt="result" style={styles.img} />
+            ) : (
+              <div style={styles.placeholder}>Hasil akan tampil di sini</div>
             )}
           </div>
 
-          {!isLoading && resultUrl && (
-            <a
-              href={resultUrl}
-              download="virtual-try-on-collage.png"
-              className="inline-block mt-4 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold"
-            >
-              Download PNG
-            </a>
-          )}
+          <div style={styles.row}>
+            <button style={styles.clearBtn} onClick={onClearResult} disabled={!resultImage}>
+              Clear Hasil
+            </button>
+            {resultImage && (
+              <a href={resultImage} download="virtual-try-on.png" style={styles.downloadBtn}>
+                Download
+              </a>
+            )}
+          </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="py-8 text-center text-xs text-neutral-500">
-        © {new Date().getFullYear()} BernMorphosis — Demo Virtual Try-On
-      </footer>
     </div>
   );
-};
+}
 
-export default App;
+/* ================== Styles (inline) ================== */
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #111 0%, #1a1a1a 100%)",
+    color: "#e9eef5",
+    fontFamily:
+      "system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif",
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 20px",
+    background: "#0f0f10",
+    borderBottom: "1px solid #2a2a2a",
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+  },
+  logo: { fontSize: 22 },
+  title: { margin: 0, fontWeight: 800, letterSpacing: 0.4 },
+  main: {
+    maxWidth: 1200,
+    margin: "24px auto",
+    padding: "0 16px",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 20,
+  },
+  column: {
+    background: "#161718",
+    border: "1px solid #2a2a2a",
+    borderRadius: 14,
+    padding: 16,
+    boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+  },
+  sectionTitle: { margin: "4px 0 14px 0", opacity: 0.9 },
+  previewBox: {
+    height: 420,
+    borderRadius: 12,
+    border: "1px dashed #3a3a3a",
+    background: "#0f0f11",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+  },
+  resultBox: {
+    height: 420,
+    borderRadius: 12,
+    border: "1px solid #2f2f2f",
+    background: "#0e0f10",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+  },
+  img: { width: "100%", height: "100%", objectFit: "contain" },
+  placeholder: { opacity: 0.5, fontSize: 14 },
+  row: { display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" },
+  uploadBtn: {
+    background: "#2c6fef",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    border: "1px solid #2a62cf",
+    fontWeight: 600,
+  },
+  resetBtn: {
+    background: "#3a3a3a",
+    color: "#eee",
+    padding: "10px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    border: "1px solid #2e2e2e",
+    fontWeight: 600,
+  },
+  generateBtn: {
+    background: "#12a150",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    border: "1px solid #108b45",
+    fontWeight: 700,
+  },
+  clearBtn: {
+    background: "#5a2a2a",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    border: "1px solid #4a2020",
+    fontWeight: 700,
+  },
+  downloadBtn: {
+    background: "#2b2f54",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: 10,
+    textDecoration: "none",
+    border: "1px solid #26305a",
+    fontWeight: 700,
+  },
+  note: { marginTop: 10, opacity: 0.7, fontSize: 12 },
+  error: { marginTop: 8, color: "#ff7a7a", fontWeight: 700 },
+};
