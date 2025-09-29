@@ -1,0 +1,13 @@
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1]; // buang prefix "data:image/...;base64,"
+      if (base64) resolve(base64);
+      else reject(new Error("Failed to extract base64 string from file."));
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
